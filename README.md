@@ -1,1 +1,1 @@
-данный проект является практическим для курса Devops
+this project is for teaching on the course Devops
