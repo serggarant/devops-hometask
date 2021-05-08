@@ -1,0 +1,12 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+Vagrant.configure('2') do |config|
+  config.vm.box = "debian/buster64"
+  config.vm.provider'virtualbox' do |vb|
+  end
+  config.vm.define 'server1' do |server1|
+    server1.vm.hostname = 'server1'
+    #server1.vm.provision 'shell', path: 'server1.sh'
+    server1.vm.network 'private_network', ip: '172.16.1.100'
+  end
+end
