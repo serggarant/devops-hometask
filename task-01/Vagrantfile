@@ -3,10 +3,33 @@
 Vagrant.configure('2') do |config|
   config.vm.box = "debian/buster64"
   config.vm.provider'virtualbox' do |vb|
-  end
-  config.vm.define 'server1' do |server1|
-    server1.vm.hostname = 'server1'
-    #server1.vm.provision 'shell', path: 'server1.sh'
-    server1.vm.network 'private_network', ip: '172.16.1.100'
-  end
+
+  config.vm.network "forwarded_port", guest: 80, host: 8080, host_ip: "127.0.0.1"
+  config.vm.network "forwarded_port", guest: 81, host: 8081, host_ip: "127.0.0.1"
+  config.vm.network 'private_network', ip: '192.168.33.10'
+
+end
+  config.vm.provision "shell", inline: <<-SHELL
+
+  sudo apt-get update
+  sudo apt-get -y install apache2 libapache2-mod-php php php-cgi php-cli php-fpm
+
+  sudo rm /etc/apache2/sites-available/000-default.conf
+  sudo rm /etc/apache2/sites-enabled/000-default.conf
+  sudo mkdir -p /var/www/01-demosite-static/html
+  sudo mkdir -p /var/www/01-demosite-php/html
+  sudo mkdir -p /etc/apache2/logs
+  sudo chmod 775 /var/www
+  sudo chown -R www-data: /var/www
+  sudo cp /vagrant/01-demosite-php/index.php /var/www/01-demosite-php/html
+  sudo cp /vagrant/01-demosite-static/index.html /var/www/01-demosite-static/html
+  sudo cp /vagrant/01-demosite-php/01-demosite-php.conf /etc/apache2/sites-available
+  sudo cp /vagrant/01-demosite-static/01-demosite-static.conf /etc/apache2/sites-available
+  sudo ln -s /etc/apache2/sites-available/01-demosite-static.conf /etc/apache2/sites-enabled/
+  sudo ln -s /etc/apache2/sites-available/01-demosite-php.conf /etc/apache2/sites-enabled/
+  sudo sed -i '/Listen 80/a Listen 81' /etc/apache2/ports.conf
+  sudo systemctl enable apache2
+  sudo systemctl restart apache2
+
+  SHELL
 end
