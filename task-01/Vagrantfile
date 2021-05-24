@@ -1,7 +1,7 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 Vagrant.configure("2") do |config|
-  config.vm.box = "Siarhei/sergdeb"
+  config.vm.box = "Siarhei/sergcentoslamp"
   config.vm.box_version = "1.1"
   config.vm.provider'virtualbox' do |vb|
 
@@ -10,4 +10,18 @@ Vagrant.configure("2") do |config|
   config.vm.network 'private_network', ip: '192.168.33.10'
 
 end
+  config.vm.provision "shell", inline: <<-SHELL
+
+
+  sudo mkdir -p /var/www/01-demosite-static/html
+  sudo mkdir -p /var/www/01-demosite-php/html
+  sudo chmod 775 /var/www
+  sudo chown -R root:vagrant /var/www/html
+  sudo cp /vagrant/01-demosite-php/index.php /var/www/01-demosite-php/html
+  sudo cp /vagrant/01-demosite-static/index.html /var/www/01-demosite-static/html
+  sudo sed -i '/Listen 80/a Listen 81' /etc/httpd/conf/httpd.conf
+  sudo cp /vagrant/web.conf /etc/httpd/conf.d/
+  sudo systemctl restart httpd
+
+  SHELL
 end
