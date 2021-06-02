@@ -1,0 +1,19 @@
+127.0.0.1
+
+[main]
+127.0.0.1 ansible_connection=local
+
+[containers]
+10.1.1.100 ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+10.1.1.101 ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+
+[main:vars]
+ansible_connection=ssh
+ansible_user=vagrant
+ansible_password=vagrant
+
+
+[containers:vars]
+ansible_connection=ssh
+ansible_user=root
+ansible_password=root

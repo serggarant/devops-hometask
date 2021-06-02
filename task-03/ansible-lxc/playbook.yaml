@@ -1,0 +1,239 @@
+---
+- name: Configure LXC_ansible
+  hosts: main
+  tasks:
+    - name: install packages
+      become: yes
+      apt:
+        pkg:
+        - lxc
+        - lxc-templates
+        - python-pip
+        - lxc-dev
+        - sshpass
+        state: present
+
+    - name: install lxc-python2
+      become: yes
+      pip:
+        name: lxc-python2
+
+    - name: past host_key_checking = no in ansible.cfg
+      become: yes
+      lineinfile:
+        path: /etc/ansible/ansible.cfg
+        insertafter: '[defaults]'
+        line: host_key_checking = False
+
+
+    - name: Execute lxc-net
+      shell:
+         cmd: |
+          cat <<EOF | tee -a /etc/default/lxc-net
+          USE_LXC_BRIDGE="true"
+          LXC_BRIDGE="lxcbr0"
+          LXC_ADDR="10.1.1.1"
+          LXC_NETMASK="255.255.255.0"
+          LXC_NETWORK="10.1.1.0/24"
+          LXC_DHCP_RANGE="10.1.1.2,10.1.1.254"
+          LXC_DHCP_MAX="253"
+          LXC_DHCP_CONFILE=/etc/lxc/dnsmasq.conf
+          LXC_DOMAIN=""
+          EOF
+      args:
+        executable: /bin/bash
+
+    - name: Execute dnsmasq
+      shell:
+         cmd: |
+          cat <<EOF | tee /etc/lxc/dnsmasq.conf
+          dhcp-hostsfile=/etc/lxc/dnsmasq-hosts.conf
+          EOF
+      args:
+        executable: /bin/bash
+
+    - name: Execute dnsmasq-hosts
+      shell:
+         cmd: |
+          cat <<EOF | tee /etc/lxc/dnsmasq-hosts.conf
+          centos1,10.1.1.100
+          centos2,10.1.1.101
+          EOF
+      args:
+        executable: /bin/bash
+
+    - name: create directory
+      file:
+        path: "{{ item }}"
+        state: directory
+      with_items:
+        - /var/lib/lxd/networks/lxcbr0/
+        - /etc/dnsmasq.d-available/
+
+    - name: Execute dnsmasq.hosts
+      shell:
+         cmd: |
+          cat <<EOF | tee /var/lib/lxd/networks/lxcbr0/dnsmasq.hosts
+          10.1.1.100,centos1
+          10.1.1.101,centos2
+          EOF
+      args:
+        executable: /bin/bash
+
+    - name: Execute /etc/dnsmasq.d-available/lxc
+      shell:
+         cmd: |
+          cat <<EOF | tee /etc/dnsmasq.d-available/lxc
+          bind-interfaces
+          except-interface=lxcbr0
+          EOF
+      args:
+        executable: /bin/bash
+
+    - name: enable lxc-net
+      become: yes
+      service:
+        name: lxc-net
+        state: started
+        enabled: yes
+
+    - name: Execute /etc/lxc/default.conf
+      shell:
+         cmd: |
+          cat <<EOF | tee /etc/lxc/default.conf
+          lxc.net.0.type  = veth
+          lxc.net.0.flags = up
+          lxc.net.0.link  = lxcbr0
+          lxc.apparmor.profile = unconfined
+          EOF
+      args:
+        executable: /bin/bash
+
+    - name: Create a started centos1
+      become: yes
+      shell: |
+        sudo lxc-create -t download -n centos1 -- -d centos -r 8 -a amd64
+        sudo lxc-start -n centos1
+      args:
+        executable: /bin/bash
+
+    - name: Create a started centos2
+      become: yes
+      shell: |
+        sudo lxc-create -t download -n centos2 -- -d centos -r 8 -a amd64
+        sudo lxc-start -n centos2
+      args:
+        executable: /bin/bash
+
+    - name: change passwords for root in lxc containers centos1 and centos2
+      become: yes
+      shell: |
+        sudo echo "root:root" | sudo chroot /var/lib/lxc/centos1/rootfs/ chpasswd
+        sudo echo "root:root" | sudo chroot /var/lib/lxc/centos2/rootfs/ chpasswd
+
+
+
+- name: Configure containers
+  hosts: containers
+  tasks:
+    - name: install packages for containers
+      become: yes
+      yum:
+        pkg:
+        - mc
+        - httpd
+        - php
+        state: present
+      notify:
+      - Restart httpd
+
+    - name: Remove file welcome.conf
+      file:
+        path: /etc/httpd/conf.d/welcome.conf
+        state: absent
+      notify:
+      - Restart httpd
+
+  handlers:
+    - name: Restart httpd
+      become: yes
+      service:
+        name: httpd
+        state: restarted
+
+  - name: Main configule
+  hosts: main
+  become: yes
+
+  tasks:
+    - name: copy demosite-static
+      copy:
+        src: /vagrant/01-demosite-static
+        dest: /var/lib/lxc/centos1/rootfs/var/www/html
+
+    - name: copy demosite-php
+      copy:
+        src: /vagrant/01-demosite-php
+        dest: /var/lib/lxc/centos2/rootfs/var/www/html
+
+    - name: Touch 01-demosite-static.conf
+      become: yes
+      file:
+        path: /var/lib/lxc/centos1/rootfs/etc/httpd/conf.d/01-demosite-static.conf
+        state: touch
+
+    - name: Insert config 01-demosite-static.conf
+      become: yes
+      blockinfile:
+        path: /var/lib/lxc/centos1/rootfs/etc/httpd/conf.d/01-demosite-static.conf
+        block: |
+          <VirtualHost *:80>
+                  ServerAdmin serg@localhost
+                  DocumentRoot /var/www/html/01-demosite-static
+                  DirectoryIndex index.html
+          </VirtualHost>
+    - name: Touch 01-demosite-php.conf
+      become: yes
+      file:
+        path: /var/lib/lxc/centos2/rootfs/etc/httpd/conf.d/01-demosite-php.conf
+        state: touch
+
+    - name: Insert config 01-demosite-php.conf
+      become: yes
+      blockinfile:
+        path: /var/lib/lxc/centos2/rootfs/etc/httpd/conf.d/01-demosite-php.conf
+        block: |
+          <VirtualHost *:81>
+                  ServerAdmin serg@localhost
+                  DocumentRoot /var/www/html/01-demosite-php
+                  DirectoryIndex index.php
+          </VirtualHost>
+
+    - name: Add Apache port 81
+      lineinfile:
+        path: /etc/httpd/conf/httpd.conf
+        regexp: '^Listen 81'
+        insertafter: '^Listen 80'
+        line: 'Listen 81'
+        state: present
+
+    - name: Restart service httpd
+      become: yes
+      ansible.builtin.systemd:
+        state: restarted
+        daemon_reload: yes
+        name: httpd
+
+
+
+- name: Containers config
+  hosts: containers
+  become: yes
+
+  tasks:
+    - name: restart service httpd on centos
+      become: yes
+      systemd:
+        state: restarted
+        daemon_reload: yes
+        name: httpd
