@@ -2,29 +2,25 @@
 - name: Configure LXC_ansible
   hosts: main
   tasks:
-    - name: install packages
+    - name: Install packages
       become: yes
       apt:
         pkg:
-        - lxc
-        - lxc-templates
-        - python-pip
-        - lxc-dev
-        - sshpass
-        state: present
-
+          - lxc
+          - lxc-templates
+          - python-lxc
+          - python-pip
+          - sshpass
     - name: install lxc-python2
       become: yes
       pip:
         name: lxc-python2
-
     - name: past host_key_checking = no in ansible.cfg
       become: yes
       lineinfile:
         path: /etc/ansible/ansible.cfg
-        insertafter: '[defaults]'
+        insertafter: '\[defaults\]'
         line: host_key_checking = False
-
 
     - name: Execute lxc-net
       shell:
@@ -109,21 +105,30 @@
       args:
         executable: /bin/bash
 
-    - name: Create a started centos1
+    - name: enable lxc
       become: yes
-      shell: |
-        sudo lxc-create -t download -n centos1 -- -d centos -r 8 -a amd64
-        sudo lxc-start -n centos1
-      args:
-        executable: /bin/bash
+      service:
+        name: lxc
+        state: started
+        enabled: yes
 
-    - name: Create a started centos2
+    - name: Create a stopped container centos1
       become: yes
-      shell: |
-        sudo lxc-create -t download -n centos2 -- -d centos -r 8 -a amd64
-        sudo lxc-start -n centos2
-      args:
-        executable: /bin/bash
+      lxc_container:
+        name: centos1
+        container_log: true
+        template: download
+        state: stopped
+        template_options: -d centos -r 8 -a amd64
+
+    - name: Create a stopped container centos2
+      become: yes
+      lxc_container:
+        name: centos2
+        container_log: true
+        template: download
+        state: stopped
+        template_options: -d centos -r 8 -a amd64
 
     - name: change passwords for root in lxc containers centos1 and centos2
       become: yes
@@ -131,21 +136,55 @@
         sudo echo "root:root" | sudo chroot /var/lib/lxc/centos1/rootfs/ chpasswd
         sudo echo "root:root" | sudo chroot /var/lib/lxc/centos2/rootfs/ chpasswd
 
+    - name: Start a container centos1
+      become: yes
+      lxc_container:
+        name: centos1
+        state: started
 
+    - name: Start a container centos2
+      become: yes
+      lxc_container:
+        name: centos2
+        state: started
+
+    - name: sleep 10s
+      become: yes
+      shell: |
+        sleep 10
+
+    - name: install openssh-server centos1
+      become: yes
+      lxc_container:
+        name: centos1
+        state: started
+        container_command: |
+          yum -y install openssh-server
+          systemctl restart sshd
+          yum -y install python2
+
+    - name: install openssh-server centos2
+      become: yes
+      lxc_container:
+        name: centos2
+        state: started
+        container_command: |
+          yum -y install openssh-server
+          systemctl restart sshd
+          yum -y install python2
 
 - name: Configure containers
   hosts: containers
+  gather_facts: no
   tasks:
     - name: install packages for containers
       become: yes
-      yum:
-        pkg:
+      dnf:
+        name:
         - mc
         - httpd
         - php
         state: present
-      notify:
-      - Restart httpd
 
     - name: Remove file welcome.conf
       file:
@@ -161,7 +200,7 @@
         name: httpd
         state: restarted
 
-  - name: Main configule
+- name: Main configule
   hosts: main
   become: yes
 
@@ -219,7 +258,7 @@
 
     - name: Restart service httpd
       become: yes
-      ansible.builtin.systemd:
+      systemd:
         state: restarted
         daemon_reload: yes
         name: httpd
