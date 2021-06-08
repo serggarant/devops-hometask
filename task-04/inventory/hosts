@@ -1,0 +1,19 @@
+192.168.1.2
+
+[master]
+master.puppet ansible_connection=local
+
+[slave1]
+slave1.puppet
+
+[slave2]
+slave2.puppet
+
+
+[slaves]
+slave1.puppet
+slave2.puppet
+
+[all:vars]
+ansible_user=vagrant
+ansible_password=vagrant
