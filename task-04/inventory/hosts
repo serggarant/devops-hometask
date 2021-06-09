@@ -4,15 +4,15 @@
 master.puppet ansible_connection=local
 
 [slave1]
-slave1.puppet
+192.168.1.3
 
 [slave2]
-slave2.puppet
+192.168.1.4
 
 
 [slaves]
-slave1.puppet
-slave2.puppet
+192.168.1.3
+192.168.1.4
 
 [all:vars]
 ansible_user=vagrant
