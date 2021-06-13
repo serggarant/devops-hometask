@@ -1,27 +1,17 @@
 ---
-- name: playbook
-  hosts: master.puppet
+- name: Install soft master
+  hosts: master
   become: yes
-
-
-    - name: Add servers in hosts
-      blockinfile:
-        path: /etc/hosts
-        block: |
-          192.168.1.2 puppet master.puppet
-          192.168.1.3 slave1.puppet
-          192.168.1.4 slave2.puppet
-          
-    - name: Install epel
-      dnf:
-        name: 'https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm'
-        state: present
-
-    - name: Add Puppet yum repository
+  tasks: 
+    
+    - name: install puppet
       shell: |
-        sudo dnf -y install https://yum.puppetlabs.com/puppet-release-el-8.noarch.rpm
-      args:
-        executable: /bin/bash
+        sudo yum install -y https://yum.puppet.com/puppet7-release-el-8.noarch.rpm
+
+    - name: Install Server Puppet
+      shell: yum install -y puppetserver git 
+
+    
 
     - name: Create file /etc/profile.d/mypuppet.ch
       file:
@@ -54,10 +44,6 @@
         regexp: '-Xms2g -Xmx2g'
         replace: '-Xms512m -Xmx512m'
 
-    - name: Enable puppetserver service
-      systemd:
-        name: puppetserver
-        enabled: yes
 
     - name: Create a directory /etc/puppetlabs/r10k
       file:
@@ -92,16 +78,6 @@
         /opt/puppetlabs/puppet/bin/gem install r10k
         /opt/puppetlabs/puppet/bin/r10k deploy environment -p
 
-    - name: Config master.puppet
-      blockinfile:
-        path: /etc/puppetlabs/puppet/puppet.conf
-        block: |
-          dns_alt_names = puppet,master.puppet
-          [main]
-          certname = master.puppet
-          server = master.puppet
-          environment = production
-          runinterval = 1m
 
     - name: Create file /etc/puppetlabs/puppet/autosign.conf
       file:
@@ -114,38 +90,51 @@
         block: |
           *.puppet
 
-    - name: restart puppetserver service
-      systemd:
-        state: restarted
-        daemon_reload: yes
-        name: puppetserver
 
-    - name: enable puppet-agent service
+    - name: ADD hosts
+      lineinfile:
+        path: /etc/hosts
+        line: "{{item}}"
+      with_items:
+         - '192.168.3.10 master.puppet'
+         - '192.168.3.11 slave2.puppet'
+         - '192.168.3.12 slave1.puppet'
+
+    - name: ADD host puppetserver
+      lineinfile:
+        path: /etc/puppetlabs/puppet/puppet.conf
+        line: "{{item}}"
+      with_items:
+         - server = master.puppet
+         - autosign = true 
+              
+    - name: Enable Puppet
       systemd:
         name: puppet
         enabled: yes
+        state: started
 
-    - name: restart puppet-agent service
+    - name: Start Puppet
       systemd:
-        state: restarted
-        daemon_reload: yes
+        state: started
         name: puppet
 
+#    - name: Disable SSH press key
+#      replace:
+#        path: /etc/ansible/ansible.cfg
+#        regexp: '# some basic default values...'
+#        replace: 'host_key_checking=no'
 
+#    - name: Disable SSH press key2
+#      replace:
+#        path: /etc/ansible/ansible.cfg
+#        regexp: '# ssh arguments to use'
+#        replace: 'ssh_args = -o ControlMaster=auto -o ControlPersist=60s -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes'
 
-- name: slave1
-  hosts: slave1.puppet
+- name: Install soft slave 
+  hosts: slave
   become: yes
-
   tasks:
-    - debug:
-        msg: "Running on {{inventory_hostname}}"
-
-    - name: Disable SELinux
-      shell: |
-        setenforce 0
-        sed -i.bak 's/enforcing/disabled/g' /etc/selinux/config
-
 
     - name:
       rpm_key:
@@ -181,119 +170,32 @@
           export PATH=$PATH:/opt/puppetlabs/puppet/bin
           export PATH=$PATH:/opt/puppetlabs/bin
 
-    - name: install puppet-agent
-      yum:
-        pkg:
-         - puppet-agent
-        state: present
 
-    - name: enable puppet service
-      systemd:
-        name: puppet
-        enabled: yes
+    - name: Install Puppet agent
+      shell: yum install -y puppet-agent
 
-    - name: Insert config puppet-agent slave1
-      blockinfile:
+    - name: ADD hosts
+      lineinfile:
+        path: /etc/hosts
+        line: '192.168.3.10 master.puppet puppet'
+   
+    - name: Make connect to puppet-server
+      lineinfile:
         path: /etc/puppetlabs/puppet/puppet.conf
-        block: |
-          [main]
-          certname = slave1.puppet
-          server = master.puppet
-          environment = production
-          runinterval = 1m
-    - name: enable puppet-agent service
+        line: "{{item}}"
+      with_items:
+         - '[agent]'
+         - 'server = master.puppet' 
+         - 'runinterval = 1m'
+
+    - name: Enable Puppet
       systemd:
         name: puppet
         enabled: yes
+        state: started
 
-    - name: restart puppet-agent service
+    - name: Restart Puppet
       systemd:
         state: restarted
         daemon_reload: yes
         name: puppet
-
-- name: slave2
-  hosts: slave2.puppet
-  become: yes
-
-  tasks:
-    - debug:
-        msg: "Running on {{inventory_hostname}}"
-
-    - name: Disable SELinux
-      shell: |
-        setenforce 0
-        sed -i.bak 's/enforcing/disabled/g' /etc/selinux/config
-
-    - name:
-      rpm_key:
-        state: present
-        key: https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-8
-
-    - name: Install epel
-      dnf:
-        name: 'https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm'
-        state: present
-
-    - name: Add Puppet yum repository
-      shell: |
-        sudo dnf -y install https://yum.puppetlabs.com/puppet-release-el-8.noarch.rpm
-      args:
-        executable: /bin/bash
-
-    - name: Create file /etc/profile.d/mypuppet.ch
-      file:
-        path: /etc/profile.d/mypuppet.ch
-        state: touch
-
-    - name: Add path for sudo
-      replace:
-        path: /etc/sudoers
-        regexp: 'Defaults    secure_path = /sbin:/bin:/usr/sbin:/usr/bin'
-        replace: 'Defaults    secure_path = /sbin:/bin:/usr/sbin:/usr/bin:/opt/puppetlabs/puppet/bin:/opt/puppetlabs/bin'
-
-    - name: Add path /opt/puppetlabs/puppet/bin
-      blockinfile:
-        path: /etc/profile.d/mypuppet.ch
-        block: |
-          export PATH=$PATH:/opt/puppetlabs/puppet/bin
-          export PATH=$PATH:/opt/puppetlabs/bin
-
-    - name: install puppet-agent
-      yum:
-        pkg:
-         - puppet-agent
-        state: present
-
-    - name: enable puppet service
-      systemd:
-        name: puppet
-        enabled: yes
-
-    - name: Insert config puppet-agent slave2
-      blockinfile:
-        path: /etc/puppetlabs/puppet/puppet.conf
-        block: |
-          [main]
-          certname = slave2.puppet
-          server = master.puppet
-          environment = production
-          runinterval = 1m
-
-    - name: enable puppet-agent service
-      systemd:
-        name: puppet
-        enabled: yes
-
-    - name: restart puppet-agent service
-      systemd:
-        state: restarted
-        daemon_reload: yes
-        name: puppet
-
-
-    #- name: play ansible on master
-    #  shell: |
-    #    ansible-playbook -i /vagrant/inventory/hosts /vagrant/slave.yaml
-    #  args:
-    #    executable: /bin/bash
