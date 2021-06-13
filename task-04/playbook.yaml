@@ -97,8 +97,8 @@
         line: "{{item}}"
       with_items:
          - '192.168.3.10 master.puppet'
-         - '192.168.3.11 slave2.puppet'
-         - '192.168.3.12 slave1.puppet'
+         - '192.168.3.11 slave1.puppet'
+         - '192.168.3.12 slave2.puppet'
 
     - name: ADD host puppetserver
       lineinfile:
