@@ -4,7 +4,7 @@
   become: yes
   tasks:
 
-    - name: install puppet repository
+    - name: enable the Enterprise Linux 8 repository
       shell: |
         sudo yum install -y https://yum.puppet.com/puppet7-release-el-8.noarch.rpm
 
@@ -113,24 +113,14 @@
         state: started
         name: puppet
 
-#    - name: Disable SSH press key
-#      replace:
-#        path: /etc/ansible/ansible.cfg
-#        regexp: '# some basic default values...'
-#        replace: 'host_key_checking=no'
 
-#    - name: Disable SSH press key2
-#      replace:
-#        path: /etc/ansible/ansible.cfg
-#        regexp: '# ssh arguments to use'
-#        replace: 'ssh_args = -o ControlMaster=auto -o ControlPersist=60s -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes'
 
 - name: Install soft slave
   hosts: slave
   become: yes
   tasks:
 
-    - name: install puppet
+    - name: enable the Enterprise Linux 8 repository
       shell: |
         sudo yum install -y https://yum.puppet.com/puppet7-release-el-8.noarch.rpm
 
