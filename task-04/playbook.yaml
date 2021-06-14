@@ -2,16 +2,16 @@
 - name: Install soft master
   hosts: master
   become: yes
-  tasks: 
-    
-    - name: install puppet
+  tasks:
+
+    - name: install puppet repository
       shell: |
         sudo yum install -y https://yum.puppet.com/puppet7-release-el-8.noarch.rpm
 
-    - name: Install Server Puppet
-      shell: yum install -y puppetserver git 
+    - name: Install Server Puppet and git
+      shell: yum install -y puppetserver git
 
-    
+
 
     - name: Create file /etc/profile.d/mypuppet.ch
       file:
@@ -31,12 +31,6 @@
           export PATH=$PATH:/opt/puppetlabs/puppet/bin
           export PATH=$PATH:/opt/puppetlabs/bin
 
-    - name: Install puppetserver
-      yum:
-        pkg:
-        - git
-        - puppetserver
-        state: present
 
     - name: Change memory for puppetserver
       replace:
@@ -106,8 +100,8 @@
         line: "{{item}}"
       with_items:
          - server = master.puppet
-         - autosign = true 
-              
+         - autosign = true
+
     - name: Enable Puppet
       systemd:
         name: puppet
@@ -131,44 +125,14 @@
 #        regexp: '# ssh arguments to use'
 #        replace: 'ssh_args = -o ControlMaster=auto -o ControlPersist=60s -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes'
 
-- name: Install soft slave 
+- name: Install soft slave
   hosts: slave
   become: yes
   tasks:
 
-    - name:
-      rpm_key:
-        state: present
-        key: https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-8
-
-    - name: Install epel
-      dnf:
-        name: 'https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm'
-        state: present
-
-    - name: Add Puppet yum repository
+    - name: install puppet
       shell: |
-        sudo dnf -y install https://yum.puppetlabs.com/puppet-release-el-8.noarch.rpm
-      args:
-        executable: /bin/bash
-
-    - name: Create file /etc/profile.d/mypuppet.ch
-      file:
-        path: /etc/profile.d/mypuppet.ch
-        state: touch
-
-    - name: Add path for sudo
-      replace:
-        path: /etc/sudoers
-        regexp: 'Defaults    secure_path = /sbin:/bin:/usr/sbin:/usr/bin'
-        replace: 'Defaults    secure_path = /sbin:/bin:/usr/sbin:/usr/bin:/opt/puppetlabs/puppet/bin:/opt/puppetlabs/bin'
-
-    - name: Add path /opt/puppetlabs/puppet/bin
-      blockinfile:
-        path: /etc/profile.d/mypuppet.ch
-        block: |
-          export PATH=$PATH:/opt/puppetlabs/puppet/bin
-          export PATH=$PATH:/opt/puppetlabs/bin
+        sudo yum install -y https://yum.puppet.com/puppet7-release-el-8.noarch.rpm
 
 
     - name: Install Puppet agent
@@ -178,14 +142,14 @@
       lineinfile:
         path: /etc/hosts
         line: '192.168.3.10 master.puppet puppet'
-   
+
     - name: Make connect to puppet-server
       lineinfile:
         path: /etc/puppetlabs/puppet/puppet.conf
         line: "{{item}}"
       with_items:
          - '[agent]'
-         - 'server = master.puppet' 
+         - 'server = master.puppet'
          - 'runinterval = 1m'
 
     - name: Enable Puppet
