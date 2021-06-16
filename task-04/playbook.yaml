@@ -1,28 +1,23 @@
 ---
-- name: Install soft master
+- name: config master
   hosts: master
-  become: yes
   tasks:
-
     - name: enable the Enterprise Linux 8 repository
-      shell: |
-        sudo yum install -y https://yum.puppet.com/puppet7-release-el-8.noarch.rpm
+      dnf:
+        name: 'https://yum.puppet.com/puppet7-release-el-8.noarch.rpm'
+        state: present
+        disable_gpg_check: yes
 
     - name: Install Server Puppet and git
-      shell: yum install -y puppetserver git
-
-
+      dnf:
+        name:
+          - puppetserver
+          - git
 
     - name: Create file /etc/profile.d/mypuppet.ch
       file:
         path: /etc/profile.d/mypuppet.ch
         state: touch
-
-    - name: Add path for sudo
-      replace:
-        path: /etc/sudoers
-        regexp: 'Defaults    secure_path = /sbin:/bin:/usr/sbin:/usr/bin'
-        replace: 'Defaults    secure_path = /sbin:/bin:/usr/sbin:/usr/bin:/opt/puppetlabs/puppet/bin:/opt/puppetlabs/bin'
 
     - name: Add path /opt/puppetlabs/puppet/bin
       blockinfile:
@@ -31,13 +26,14 @@
           export PATH=$PATH:/opt/puppetlabs/puppet/bin
           export PATH=$PATH:/opt/puppetlabs/bin
 
-
     - name: Change memory for puppetserver
       replace:
         path: /etc/sysconfig/puppetserver
-        regexp: '-Xms2g -Xmx2g'
-        replace: '-Xms512m -Xmx512m'
-
+        regexp: "{{ item.find }}"
+        replace: "{{ item.replace }}"
+      loop:
+        - { find: '-Xms2g', replace: '-Xms256m' }
+        - { find: '-Xmx2g', replace: '-Xmx256m' }
 
     - name: Create a directory /etc/puppetlabs/r10k
       file:
@@ -45,15 +41,10 @@
         state: directory
         mode: '0775'
 
-    - name: Create file /etc/puppetlabs/r10k/r10k.yaml
-      file:
-        path: /etc/puppetlabs/r10k/r10k.yaml
-        state: touch
-
     - name: Add config r10k
-      blockinfile:
-        path: /etc/puppetlabs/r10k/r10k.yaml
-        block: |
+      copy:
+        dest: /etc/puppetlabs/r10k/r10k.yaml
+        content: |
           ---
           :cachedir: '/var/cache/r10k'
           :sources:
@@ -61,72 +52,58 @@
               remote: 'https://github.com/serggarant/puppet_conf.git'
               basedir: '/etc/puppetlabs/code/environments'
 
-    - name: Create a directory /var/cache/r10k
-      file:
-        path: /var/cache/r10k
-        state: directory
-        mode: '2775'
-
     - name: setup gem r10k
-      shell: |
-        /opt/puppetlabs/puppet/bin/gem install r10k
-        /opt/puppetlabs/puppet/bin/r10k deploy environment -p
+      command: /opt/puppetlabs/puppet/bin/gem install r10k
 
-
-    - name: Create file /etc/puppetlabs/puppet/autosign.conf
-      file:
-        path: /etc/puppetlabs/puppet/autosign.conf
-        state: touch
+    - name: Execute r10k sync
+      command: /opt/puppetlabs/puppet/bin/r10k deploy environment -p
 
     - name: Insert config autosign.conf
-      blockinfile:
-        path: /etc/puppetlabs/puppet/autosign.conf
-        block: |
+      copy:
+        dest: /etc/puppetlabs/puppet/autosign.conf
+        content: |
           *.puppet
 
-
     - name: ADD hosts
-      lineinfile:
+      blockinfile:
         path: /etc/hosts
-        line: "{{item}}"
-      with_items:
-         - '192.168.3.10 master.puppet'
-         - '192.168.3.11 slave1.puppet'
-         - '192.168.3.12 slave2.puppet'
+        block:
+         192.168.3.10 master.puppet
+         192.168.3.11 slave1.puppet
+         192.168.3.12 slave2.puppet
 
     - name: ADD host puppetserver
-      lineinfile:
+      ini_file:
         path: /etc/puppetlabs/puppet/puppet.conf
-        line: "{{item}}"
+        section: main
+        option: "{{ item.option }}"
+        value: "{{ item.value }}"
       with_items:
-         - server = master.puppet
-         - autosign = true
+        - { option: "server", value: "master.puppet" }
+        - { option: "autosign", value: "true" }
 
     - name: Enable Puppet
       systemd:
-        name: puppet
+        name: "{{ item }}"
         enabled: yes
         state: started
-
-    - name: Start Puppet
-      systemd:
-        state: started
-        name: puppet
-
-
+      loop:
+        - puppet
+        - puppetserver
 
 - name: Install soft slave
   hosts: slave
-  become: yes
   tasks:
-
     - name: enable the Enterprise Linux 8 repository
-      shell: |
-        sudo yum install -y https://yum.puppet.com/puppet7-release-el-8.noarch.rpm
-
+      dnf:
+        name: https://yum.puppet.com/puppet7-release-el-8.noarch.rpm
+        state: present
+        disable_gpg_check: yes
 
     - name: Install Puppet agent
-      shell: yum install -y puppet-agent
+      dnf:
+        name: puppet-agent
+        state: present
 
     - name: ADD hosts
       lineinfile:
@@ -134,13 +111,14 @@
         line: '192.168.3.10 master.puppet puppet'
 
     - name: Make connect to puppet-server
-      lineinfile:
+      ini_file:
         path: /etc/puppetlabs/puppet/puppet.conf
-        line: "{{item}}"
+        section: agent
+        option: "{{ item.option }}"
+        value: "{{ item.value }}"
       with_items:
-         - '[agent]'
-         - 'server = master.puppet'
-         - 'runinterval = 1m'
+        - { option: "server", value: "master.puppet" }
+        - { option: "runinterval", value: "1m" }
 
     - name: Enable Puppet
       systemd:
@@ -148,6 +126,7 @@
         enabled: yes
         state: started
 
+  handlers:
     - name: Restart Puppet
       systemd:
         state: restarted
