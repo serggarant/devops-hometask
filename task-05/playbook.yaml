@@ -1,0 +1,134 @@
+---
+- name: disable selinux
+  hosts: all
+  tasks:
+    - name: Change status selinux
+      shell: setenforce 0
+
+    - name: enable the Enterprise Linux 8 repository
+      dnf:
+        name: 'https://yum.puppet.com/puppet7-release-el-8.noarch.rpm'
+        state: present
+        disable_gpg_check: yes
+
+- name: config master
+  hosts: master
+  tasks:
+    - name: Install Server Puppet and git
+      dnf:
+        name:
+          - puppetserver
+          - git
+
+    - name: Create file /etc/profile.d/mypuppet.ch
+      file:
+        path: /etc/profile.d/mypuppet.ch
+        state: touch
+
+    - name: Add path /opt/puppetlabs/puppet/bin
+      blockinfile:
+        path: /etc/profile.d/mypuppet.ch
+        block: |
+          export PATH=$PATH:/opt/puppetlabs/puppet/bin
+          export PATH=$PATH:/opt/puppetlabs/bin
+
+    - name: Change memory for puppetserver
+      replace:
+        path: /etc/sysconfig/puppetserver
+        regexp: "{{ item.find }}"
+        replace: "{{ item.replace }}"
+      loop:
+        - { find: '-Xms2g', replace: '-Xms256m' }
+        - { find: '-Xmx2g', replace: '-Xmx256m' }
+
+    - name: Create a directory /etc/puppetlabs/r10k
+      file:
+        path: /etc/puppetlabs/r10k
+        state: directory
+        mode: '0775'
+
+    - name: Add config r10k
+      copy:
+        dest: /etc/puppetlabs/r10k/r10k.yaml
+        content: |
+          ---
+          :cachedir: '/var/cache/r10k'
+          :sources:
+            :my-org:
+              remote: 'https://github.com/serggarant/puppet_conf.git'
+              basedir: '/etc/puppetlabs/code/environments'
+
+    - name: setup gem r10k
+      command: /opt/puppetlabs/puppet/bin/gem install r10k
+
+    - name: Execute r10k sync
+      command: /opt/puppetlabs/puppet/bin/r10k deploy environment -p
+
+    - name: Insert config autosign.conf
+      copy:
+        dest: /etc/puppetlabs/puppet/autosign.conf
+        content: |
+          *.puppet
+
+    - name: ADD hosts
+      blockinfile:
+        path: /etc/hosts
+        block:
+         192.168.3.10 master.puppet
+         192.168.3.11 slave1.puppet
+         192.168.3.12 slave2.puppet
+
+    - name: ADD host puppetserver
+      ini_file:
+        path: /etc/puppetlabs/puppet/puppet.conf
+        section: main
+        option: "{{ item.option }}"
+        value: "{{ item.value }}"
+      with_items:
+        - { option: "server", value: "master.puppet" }
+        - { option: "autosign", value: "true" }
+
+    - name: Enable Puppet
+      systemd:
+        name: "{{ item }}"
+        enabled: yes
+        state: started
+      loop:
+        - puppet
+        - puppetserver
+
+- name: Install soft slave
+  hosts: slave
+  tasks:
+    - name: Install Puppet agent
+      dnf:
+        name: puppet-agent
+        state: present
+
+    - name: ADD hosts
+      lineinfile:
+        path: /etc/hosts
+        line: '192.168.3.10 master.puppet puppet'
+
+    - name: Make connect to puppet-server
+      ini_file:
+        path: /etc/puppetlabs/puppet/puppet.conf
+        section: agent
+        option: "{{ item.option }}"
+        value: "{{ item.value }}"
+      with_items:
+        - { option: "server", value: "master.puppet" }
+        - { option: "runinterval", value: "1m" }
+
+    - name: Enable Puppet
+      systemd:
+        name: puppet
+        enabled: yes
+        state: started
+
+  handlers:
+    - name: Restart Puppet
+      systemd:
+        state: restarted
+        daemon_reload: yes
+        name: puppet
