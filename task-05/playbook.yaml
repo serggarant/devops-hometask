@@ -38,8 +38,8 @@
         regexp: "{{ item.find }}"
         replace: "{{ item.replace }}"
       loop:
-        - { find: '-Xms2g', replace: '-Xms1g' }
-        - { find: '-Xmx2g', replace: '-Xmx1g' }
+        - { find: '-Xms2g', replace: '-Xms768m' }
+        - { find: '-Xmx2g', replace: '-Xmx768m' }
 
     - name: Create a directory /etc/puppetlabs/r10k
       file:
