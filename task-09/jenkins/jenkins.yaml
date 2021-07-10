@@ -1,0 +1,80 @@
+---
+- name: install jenkins
+  hosts: localhost
+  become: yes
+
+  tasks:
+    - name: install packages
+      apt:
+        pkg:
+        - build-essential
+        - gnupg
+        - curl
+        - wget
+        - git
+        - default-jdk
+        - jq
+        state: present
+        update_cache: true
+
+    - name: add key
+      apt_key:
+        url: https://pkg.jenkins.io/debian-stable/jenkins.io.key
+        state: present
+
+    - name: add  repository
+      apt_repository:
+        repo: deb https://pkg.jenkins.io/debian-stable binary/
+        state: present
+
+    - name: install jenkins
+      apt:
+        name: jenkins
+        state: present
+
+    - name: jenkins skip startup
+      lineinfile:
+        dest=/etc/default/jenkins
+        regexp='^JAVA_ARGS='
+        line='JAVA_ARGS="-Djenkins.install.runSetupWizard=false -Dhudson.security.csrf.DefaultCrumbIssuer.EXCLUDE_SESSION_ID=true -Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8"'
+    - name: start jenkins
+      service:
+        name: jenkins
+        state: started
+        enabled: true
+
+    - name: sleep for 60 seconds
+      command: sleep 60
+      delegate_to: localhost
+
+    - name: install plugins
+      jenkins_plugin:
+        name: "{{ item }}"
+      loop:
+        - golang
+        - git
+        - github
+        - nexus-artifact-uploader
+        - publish-over-ssh
+        - Pipeline
+        - ssh-agent
+      register: plugin_result
+      until: plugin_result is success
+      retries: 5
+      delay: 10
+
+    - name: copy files
+      copy:
+        src: /jenkins/
+        dest: /var/lib/jenkins/
+        owner: jenkins
+        group: jenkins
+
+    - name: sleep for 10 seconds
+      command: sleep 10
+      delegate_to: localhost
+
+    - name: restart jenkins
+      service:
+        name: jenkins
+        state: restarted
