@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: site-deployment
+spec:
+  selector:
+    matchLabels:
+      app: site
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: site
+    spec:
+      containers:
+      - name: site
+        image: serggarant/hometask-serg:v2
+        ports:
+        - containerPort: 80
+        readinessProbe:
+          initialDelaySeconds: 10
+          timeoutSeconds: 1
+          httpGet:
+            path: /
+            port: 80
+        livenessProbe:
+          initialDelaySeconds: 10
+          timeoutSeconds: 1
+          httpGet:
+            path: /
+            port: 80
