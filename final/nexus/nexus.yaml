@@ -25,7 +25,7 @@
     nexus_config_maven: false
     nexus_config_raw: true
     nexus_repos_raw_hosted:
-      - name: word-cloud-generator
+      - name: word-cloud-builds
         write_policy: allow
         version_policy: release
         strict_content_validation: false
