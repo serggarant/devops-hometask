@@ -1,0 +1,100 @@
+---
+- name: install jenkins
+  hosts: localhost
+  become: yes
+
+  tasks:
+    - name: install packages
+      apt:
+        pkg:
+        - build-essential
+        - gnupg
+        - curl
+        - wget
+        - git
+        - default-jdk
+        - jq
+        - docker.io
+        state: present
+        update_cache: true
+
+    - name: add key
+      apt_key:
+        url: https://pkg.jenkins.io/debian-stable/jenkins.io.key
+        state: present
+
+    - name: add  repository
+      apt_repository:
+        repo: deb https://pkg.jenkins.io/debian-stable binary/
+        state: present
+
+    - name: install jenkins
+      apt:
+        name: jenkins
+        state: present
+
+    - name: jenkins skip startup
+      lineinfile:
+        dest=/etc/default/jenkins
+        regexp='^JAVA_ARGS='
+        line='JAVA_ARGS="-Djenkins.install.runSetupWizard=false -Dhudson.security.csrf.DefaultCrumbIssuer.EXCLUDE_SESSION_ID=true -Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8"'
+
+    - name: start jenkins
+      service:
+        name: jenkins
+        state: started
+        enabled: true
+
+    - name: sleep for 60 seconds
+      command: sleep 60
+      delegate_to: localhost
+
+    - name: install plugins
+      jenkins_plugin:
+        name: "{{ item }}"
+        state: present
+        timeout: 300
+        with_dependencies: yes
+      register: plugin_result
+      until: plugin_result is success
+      retries: 5
+      delay: 10
+      loop:
+        - cloudbees-folder
+        - antisamy-markup-formatter
+        - build-timeout
+        - ws-cleanup
+        - workflow-aggregator
+        - github-branch-source
+        - pipeline-github-lib
+        - pipeline-stage-view
+        - git
+        - ssh-slaves
+        - golang
+        - nexus-artifact-uploader
+        - ssh
+        - docker-plugin
+        - docker-workflow
+        - timestamper
+
+    - name: copy files
+      copy:
+        src: /jenkins/
+        dest: /var/lib/jenkins/
+        owner: jenkins
+        group: jenkins
+
+    - name: sleep for 10 seconds
+      command: sleep 10
+      delegate_to: localhost
+
+    - name: Adding user jenkins to docker group
+      user:
+        name: jenkins
+        groups: docker
+        append: yes
+
+    - name: restart jenkins
+      service:
+        name: jenkins
+        state: restarted

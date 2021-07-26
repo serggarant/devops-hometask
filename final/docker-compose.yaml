@@ -1,0 +1,41 @@
+version: '3'
+services:
+
+  nexus:
+    build:
+      context: ./nexus
+      dockerfile: Dockerfile
+    stdin_open: true
+    ports:
+      - 81:8081
+    networks:
+      serg:
+        ipv4_address: 192.168.2.4
+    container_name: nexus
+
+  jenkins:
+    build:
+      context: ./jenkins
+      dockerfile: Dockerfile
+    stdin_open: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - workspace:/var/lib/jenkins/workspace
+    networks:
+      serg:
+        ipv4_address: 192.168.2.3
+    ports:
+      - 80:8080
+    container_name: jenkins
+
+networks:
+  serg:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 192.168.2.0/24
+
+volumes:
+  workspace:
+    external: false

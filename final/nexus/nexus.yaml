@@ -1,0 +1,64 @@
+---
+- name: install nexus
+  hosts: localhost
+  become: yes
+  pre_tasks:
+      - apt:
+          pkg:
+          - gpg
+          - build-essential
+          - gnupg
+          - curl
+          - rsync
+          state: present
+      - apt_key:
+          url: https://adoptopenjdk.jfrog.io/adoptopenjdk/api/gpg/key/public
+      - apt_repository:
+          repo: deb https://adoptopenjdk.jfrog.io/adoptopenjdk/deb/ buster main
+          state: present
+          update_cache: true
+  vars:
+    java_packages:
+       - adoptopenjdk-8-hotspot-jre
+    nexus_admin_password: "admin"
+    nexus_annonymous_access: yes
+    nexus_config_maven: false
+    nexus_config_raw: true
+    nexus_repos_raw_hosted:
+      - name: word-cloud-generator
+        write_policy: allow
+        version_policy: release
+        strict_content_validation: false
+    nexus_roles:
+      - id: wcg-dev
+        name: wcg-dev
+        description: wcg-dev
+        privileges:
+          - nx-repository-view-*-*-edit
+        roles: []
+      - id: wcg-dl
+        name: wcg-dl
+        description: 'wcg-dl'
+        privileges:
+          - nx-repository-view-*-*-read
+        roles: []
+    nexus_local_users:
+      - username: uploader
+        state: present
+        first_name: uploader
+        last_name: uploader
+        email: serg@company.com
+        password: "uploader"
+        roles:
+          - wcg-dev
+      - username: downloader
+        state: present
+        first_name: downloader
+        last_name: downloader
+        email: serg@company.com
+        password: "downloader"
+        roles:
+          - wcg-dl
+  roles:
+    - role: geerlingguy.java
+    - role: ansible-thoteam.nexus3-oss
